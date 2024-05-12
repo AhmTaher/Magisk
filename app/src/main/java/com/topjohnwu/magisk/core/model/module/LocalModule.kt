@@ -43,10 +43,10 @@ data class LocalModule(
         set(enable) {
             if (enable) {
                 disableFile.delete()
-                Shell.cmd("copy_sepolicy_rules").submit()
+                Shell.cmd("copy_preinit_files").submit()
             } else {
                 !disableFile.createNewFile()
-                Shell.cmd("copy_sepolicy_rules").submit()
+                Shell.cmd("copy_preinit_files").submit()
             }
         }
 
@@ -56,10 +56,10 @@ data class LocalModule(
             if (remove) {
                 if (updateFile.exists()) return
                 removeFile.createNewFile()
-                Shell.cmd("copy_sepolicy_rules").submit()
+                Shell.cmd("copy_preinit_files").submit()
             } else {
                 removeFile.delete()
-                Shell.cmd("copy_sepolicy_rules").submit()
+                Shell.cmd("copy_preinit_files").submit()
             }
         }
 
@@ -122,15 +122,13 @@ data class LocalModule(
 
     companion object {
 
-        private val PERSIST get() = "${Const.MAGISKTMP}/mirror/persist/magisk"
-
         fun loaded() = RootUtils.fs.getFile(Const.MAGISK_PATH).exists()
 
         suspend fun installed() = withContext(Dispatchers.IO) {
             RootUtils.fs.getFile(Const.MAGISK_PATH)
                 .listFiles()
                 .orEmpty()
-                .filter { !it.isFile }
+                .filter { !it.isFile && !it.isHidden }
                 .map { LocalModule("${Const.MAGISK_PATH}/${it.name}") }
                 .sortedBy { it.name.lowercase(Locale.ROOT) }
         }

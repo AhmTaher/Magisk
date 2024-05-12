@@ -1,8 +1,8 @@
 #include <sys/mount.h>
 
-#include <magisk.hpp>
+#include <consts.hpp>
 #include <sepolicy.hpp>
-#include <base.hpp>
+#include <embed.hpp>
 
 #include "init.hpp"
 
@@ -15,14 +15,15 @@ void MagiskInit::patch_sepolicy(const char *in, const char *out) {
     sepol->magisk_rules();
 
     // Custom rules
-    if (!custom_rules_dir.empty()) {
-        if (auto dir = xopen_dir(custom_rules_dir.data())) {
-            for (dirent *entry; (entry = xreaddir(dir.get()));) {
-                auto rule = custom_rules_dir + "/" + entry->d_name + "/sepolicy.rule";
-                if (xaccess(rule.data(), R_OK) == 0) {
-                    LOGD("Loading custom sepolicy patch: [%s]\n", rule.data());
-                    sepol->load_rule_file(rule.data());
-                }
+    if (auto dir = xopen_dir("/data/" PREINITMIRR)) {
+        for (dirent *entry; (entry = xreaddir(dir.get()));) {
+            auto name = "/data/" PREINITMIRR "/"s + entry->d_name;
+            auto rule = name + "/sepolicy.rule";
+            if (xaccess(rule.data(), R_OK) == 0 &&
+                access((name + "/disable").data(), F_OK) != 0 &&
+                access((name + "/remove").data(), F_OK) != 0) {
+                LOGD("Loading custom sepolicy patch: [%s]\n", rule.data());
+                sepol->load_rule_file(rule.data());
             }
         }
     }
@@ -37,6 +38,16 @@ void MagiskInit::patch_sepolicy(const char *in, const char *out) {
     }
 }
 
+static void dump_preload() {
+    int fd = xopen("/dev/preload.so", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (fd < 0)
+        return;
+    fd_stream ch(fd);
+    if (!unxz(ch, byte_view(init_ld_xz, sizeof(init_ld_xz))))
+        return;
+    close(fd);
+}
+
 #define MOCK_COMPAT    SELINUXMOCK "/compatible"
 #define MOCK_LOAD      SELINUXMOCK "/load"
 #define MOCK_ENFORCE   SELINUXMOCK "/enforce"
@@ -49,7 +60,7 @@ bool MagiskInit::hijack_sepolicy() {
         // This meant that instead of going through convoluted methods trying to alter
         // and block init's control flow, we can just LD_PRELOAD and replace the
         // security_load_policy function with our own implementation.
-        dump_preload("/dev/preload.so", 0644);
+        dump_preload();
         setenv("LD_PRELOAD", "/dev/preload.so", 1);
     }
 
@@ -71,7 +82,7 @@ bool MagiskInit::hijack_sepolicy() {
         // This only happens on Android 8.0 - 9.0
 
         char buf[4096];
-        snprintf(buf, sizeof(buf), "%s/fstab/compatible", config->dt_dir);
+        ssprintf(buf, sizeof(buf), "%s/fstab/compatible", config->dt_dir);
         dt_compat = full_read(buf);
         if (dt_compat.empty()) {
             // Device does not do early mount and uses monolithic policy
@@ -96,19 +107,19 @@ bool MagiskInit::hijack_sepolicy() {
 
     // Read all custom rules into memory
     string rules;
-    if (!custom_rules_dir.empty()) {
-        if (auto dir = xopen_dir(custom_rules_dir.data())) {
-            for (dirent *entry; (entry = xreaddir(dir.get()));) {
-                auto rule_file = custom_rules_dir + "/" + entry->d_name + "/sepolicy.rule";
-                if (xaccess(rule_file.data(), R_OK) == 0) {
-                    LOGD("Load custom sepolicy patch: [%s]\n", rule_file.data());
-                    full_read(rule_file.data(), rules);
-                    rules += '\n';
-                }
+    if (auto dir = xopen_dir("/data/" PREINITMIRR)) {
+        for (dirent *entry; (entry = xreaddir(dir.get()));) {
+            auto name = "/data/" PREINITMIRR "/"s + entry->d_name;
+            auto rule_file = name + "/sepolicy.rule";
+            if (xaccess(rule_file.data(), R_OK) == 0 &&
+                access((name + "/disable").data(), F_OK) != 0 &&
+                access((name + "/remove").data(), F_OK) != 0) {
+                LOGD("Load custom sepolicy patch: [%s]\n", rule_file.data());
+                full_read(rule_file.data(), rules);
+                rules += '\n';
             }
         }
     }
-
     // Create a new process waiting for init operations
     if (xfork()) {
         // In parent, return and continue boot process
@@ -121,7 +132,7 @@ bool MagiskInit::hijack_sepolicy() {
         int fd = xopen(MOCK_COMPAT, O_WRONLY);
 
         char buf[4096];
-        snprintf(buf, sizeof(buf), "%s/fstab/compatible", config->dt_dir);
+        ssprintf(buf, sizeof(buf), "%s/fstab/compatible", config->dt_dir);
         xumount2(buf, MNT_DETACH);
 
         hijack();

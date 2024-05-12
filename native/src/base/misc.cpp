@@ -13,6 +13,51 @@
 
 using namespace std;
 
+bool byte_view::contains(byte_view pattern) const {
+    return _buf != nullptr && memmem(_buf, _sz, pattern._buf, pattern._sz) != nullptr;
+}
+
+bool byte_view::equals(byte_view o) const {
+    return _sz == o._sz && memcmp(_buf, o._buf, _sz) == 0;
+}
+
+heap_data byte_view::clone() const {
+    heap_data copy(_sz);
+    memcpy(copy._buf, _buf, _sz);
+    return copy;
+}
+
+void byte_data::swap(byte_data &o) {
+    std::swap(_buf, o._buf);
+    std::swap(_sz, o._sz);
+}
+
+rust::Vec<size_t> byte_data::patch(byte_view from, byte_view to) {
+    rust::Vec<size_t> v;
+    if (_buf == nullptr)
+        return v;
+    auto p = _buf;
+    auto eof = _buf + _sz;
+    while (p < eof) {
+        p = static_cast<uint8_t *>(memmem(p, eof - p, from.buf(), from.sz()));
+        if (p == nullptr)
+            return v;
+        memset(p, 0, from.sz());
+        memcpy(p, to.buf(), to.sz());
+        v.push_back(p - _buf);
+        p += from.sz();
+    }
+    return v;
+}
+
+rust::Vec<size_t> mut_u8_patch(
+        rust::Slice<uint8_t> buf,
+        rust::Slice<const uint8_t> from,
+        rust::Slice<const uint8_t> to) {
+    byte_data data(buf);
+    return data.patch(from, to);
+}
+
 int fork_dont_care() {
     if (int pid = xfork()) {
         waitpid(pid, nullptr, 0);
@@ -31,27 +76,6 @@ int fork_no_orphan() {
     if (getppid() == 1)
         exit(1);
     return 0;
-}
-
-int gen_rand_str(char *buf, int len, bool varlen) {
-    constexpr char ALPHANUM[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    static std::mt19937 gen([]{
-        if (access("/dev/urandom", F_OK) != 0)
-            mknod("/dev/urandom", 0600 | S_IFCHR, makedev(1, 9));
-        int fd = xopen("/dev/urandom", O_RDONLY | O_CLOEXEC);
-        unsigned seed;
-        xxread(fd, &seed, sizeof(seed));
-        return seed;
-    }());
-    std::uniform_int_distribution<int> dist(0, sizeof(ALPHANUM) - 2);
-    if (varlen) {
-        std::uniform_int_distribution<int> len_dist(len / 2, len);
-        len = len_dist(gen);
-    }
-    for (int i = 0; i < len - 1; ++i)
-        buf[i] = ALPHANUM[dist(gen)];
-    buf[len - 1] = '\0';
-    return len - 1;
 }
 
 int exec_command(exec_t &exec) {
@@ -130,8 +154,28 @@ void init_argv0(int argc, char **argv) {
 
 void set_nice_name(const char *name) {
     memset(argv0, 0, name_len);
-    strlcpy(argv0, name, name_len);
+    strscpy(argv0, name, name_len);
     prctl(PR_SET_NAME, name);
+}
+
+template<typename T, int base>
+static T parse_num(string_view s) {
+    T val = 0;
+    for (char c : s) {
+        if (isdigit(c)) {
+            c -= '0';
+        } else if (base > 10 && isalpha(c)) {
+            c -= isupper(c) ? 'A' - 10 : 'a' - 10;
+        } else {
+            return -1;
+        }
+        if (c >= base) {
+            return -1;
+        }
+        val *= base;
+        val += c;
+    }
+    return val;
 }
 
 /*
@@ -139,14 +183,11 @@ void set_nice_name(const char *name) {
  * Use our own implementation for faster conversion.
  */
 int parse_int(string_view s) {
-    int val = 0;
-    for (char c : s) {
-        if (!c) break;
-        if (c > '9' || c < '0')
-            return -1;
-        val = val * 10 + c - '0';
-    }
-    return val;
+    return parse_num<int, 10>(s);
+}
+
+uint64_t parse_uint64_hex(string_view s) {
+    return parse_num<uint64_t, 16>(s);
 }
 
 uint32_t binary_gcd(uint32_t u, uint32_t v) {
@@ -168,7 +209,7 @@ uint32_t binary_gcd(uint32_t u, uint32_t v) {
 
 int switch_mnt_ns(int pid) {
     char mnt[32];
-    snprintf(mnt, sizeof(mnt), "/proc/%d/ns/mnt", pid);
+    ssprintf(mnt, sizeof(mnt), "/proc/%d/ns/mnt", pid);
     if (access(mnt, R_OK) == -1) return 1; // Maybe process died..
 
     int fd, ret;
@@ -189,14 +230,14 @@ string &replace_all(string &str, string_view from, string_view to) {
     return str;
 }
 
-template <class T>
-static auto split_impl(T s, T delims) {
-    vector<std::decay_t<T>> result;
+template <typename T>
+static auto split_impl(string_view s, string_view delims) {
+    vector<T> result;
     size_t base = 0;
     size_t found;
     while (true) {
         found = s.find_first_of(delims, base);
-        result.push_back(s.substr(base, found - base));
+        result.emplace_back(s.substr(base, found - base));
         if (found == string::npos)
             break;
         base = found + 1;
@@ -204,10 +245,48 @@ static auto split_impl(T s, T delims) {
     return result;
 }
 
-vector<string> split(const string &s, const string &delims) {
-    return split_impl<const string&>(s, delims);
+vector<string> split(string_view s, string_view delims) {
+    return split_impl<string>(s, delims);
 }
 
-vector<string_view> split_ro(string_view s, string_view delims) {
+vector<string_view> split_view(string_view s, string_view delims) {
     return split_impl<string_view>(s, delims);
+}
+
+#undef vsnprintf
+int vssprintf(char *dest, size_t size, const char *fmt, va_list ap) {
+    if (size > 0) {
+        *dest = 0;
+        return std::min(vsnprintf(dest, size, fmt, ap), (int) size - 1);
+    }
+    return -1;
+}
+
+int ssprintf(char *dest, size_t size, const char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    int r = vssprintf(dest, size, fmt, va);
+    va_end(va);
+    return r;
+}
+
+#undef strlcpy
+size_t strscpy(char *dest, const char *src, size_t size) {
+    return std::min(strlcpy(dest, src, size), size - 1);
+}
+
+extern "C" void cxx$utf8str$new(rust::Utf8CStr *self, const void *s, size_t len);
+extern "C" const char *cxx$utf8str$ptr(const rust::Utf8CStr *self);
+extern "C" size_t cxx$utf8str$len(const rust::Utf8CStr *self);
+
+rust::Utf8CStr::Utf8CStr(const char *s, size_t len) {
+    cxx$utf8str$new(this, s, len);
+}
+
+const char *rust::Utf8CStr::data() const {
+    return cxx$utf8str$ptr(this);
+}
+
+size_t rust::Utf8CStr::length() const {
+    return cxx$utf8str$len(this);
 }

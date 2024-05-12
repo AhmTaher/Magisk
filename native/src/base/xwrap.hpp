@@ -1,13 +1,10 @@
 #pragma once
 
+#include <unistd.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <poll.h>
 #include <fcntl.h>
-
-#include <base-rs.hpp>
-
-using rust::xpipe2;
 
 extern "C" {
 
@@ -40,8 +37,9 @@ int xfstatat(int dirfd, const char *pathname, struct stat *buf, int flags);
 int xdup(int fd);
 int xdup2(int oldfd, int newfd);
 int xdup3(int oldfd, int newfd, int flags);
-ssize_t xreadlink(const char *pathname, char *buf, size_t bufsiz);
-ssize_t xreadlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz);
+ssize_t xreadlink(const char * __restrict__ pathname, char * __restrict__ buf, size_t bufsiz);
+ssize_t xreadlinkat(
+        int dirfd, const char * __restrict__ pathname, char * __restrict__ buf, size_t bufsiz);
 int xsymlink(const char *target, const char *linkpath);
 int xsymlinkat(const char *target, int newdirfd, const char *linkpath);
 int xlinkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags);
@@ -57,8 +55,8 @@ int xmkdirat(int dirfd, const char *pathname, mode_t mode);
 void *xmmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 ssize_t xsendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 pid_t xfork();
-int xpoll(struct pollfd *fds, nfds_t nfds, int timeout);
-char *xrealpath(const char *path, char *resolved_path);
-int xmknod(const char *pathname, mode_t mode, dev_t dev);
+int xpoll(pollfd *fds, nfds_t nfds, int timeout);
+ssize_t xrealpath(const char * __restrict__ path, char * __restrict__ buf, size_t bufsiz);
+int xmknod(const char * pathname, mode_t mode, dev_t dev);
 
 } // extern "C"

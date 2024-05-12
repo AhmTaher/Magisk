@@ -5,13 +5,14 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.MenuProvider
 import androidx.databinding.DataBindingUtil
 import androidx.databinding.OnRebindCallback
 import androidx.databinding.ViewDataBinding
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavDirections
 import com.topjohnwu.magisk.BR
-import com.topjohnwu.magisk.ktx.startAnimations
 
 abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHolder {
 
@@ -36,6 +37,9 @@ abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHo
         binding = DataBindingUtil.inflate<Binding>(inflater, layoutRes, container, false).also {
             it.setVariable(BR.viewModel, viewModel)
             it.lifecycleOwner = viewLifecycleOwner
+        }
+        if (this is MenuProvider) {
+            activity?.addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.STARTED)
         }
         savedInstanceState?.let { viewModel.onRestoreState(it) }
         return binding.root
@@ -89,5 +93,4 @@ abstract class BaseFragment<Binding : ViewDataBinding> : Fragment(), ViewModelHo
     fun NavDirections.navigate() {
         navigation?.currentDestination?.getAction(actionId)?.let { navigation!!.navigate(this) }
     }
-
 }

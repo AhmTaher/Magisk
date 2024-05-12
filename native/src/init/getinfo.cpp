@@ -117,55 +117,6 @@ static bool check_key_combo() {
     return false;
 }
 
-static FILE *kmsg;
-extern "C" void klog_write(const char *msg, int len) {
-    fprintf(kmsg, "%.*s", len, msg);
-}
-
-static int klog_with_rs(LogLevel level, const char *fmt, va_list ap) {
-    char buf[4096];
-    strlcpy(buf, "magiskinit: ", sizeof(buf));
-    int len = vsnprintf(buf + 12, sizeof(buf) - 12, fmt, ap) + 12;
-    log_with_rs(level, rust::Str(buf, len));
-    return len;
-}
-
-void setup_klog() {
-    // Shut down first 3 fds
-    int fd;
-    if (access("/dev/null", W_OK) == 0) {
-        fd = xopen("/dev/null", O_RDWR | O_CLOEXEC);
-    } else {
-        mknod("/null", S_IFCHR | 0666, makedev(1, 3));
-        fd = xopen("/null", O_RDWR | O_CLOEXEC);
-        unlink("/null");
-    }
-    xdup3(fd, STDIN_FILENO, O_CLOEXEC);
-    xdup3(fd, STDOUT_FILENO, O_CLOEXEC);
-    xdup3(fd, STDERR_FILENO, O_CLOEXEC);
-    if (fd > STDERR_FILENO)
-        close(fd);
-
-    if (access("/dev/kmsg", W_OK) == 0) {
-        fd = xopen("/dev/kmsg", O_WRONLY | O_CLOEXEC);
-    } else {
-        mknod("/kmsg", S_IFCHR | 0666, makedev(1, 11));
-        fd = xopen("/kmsg", O_WRONLY | O_CLOEXEC);
-        unlink("/kmsg");
-    }
-
-    kmsg = fdopen(fd, "w");
-    setbuf(kmsg, nullptr);
-    rust::setup_klog();
-    cpp_logger = klog_with_rs;
-
-    // Disable kmsg rate limiting
-    if (FILE *rate = fopen("/proc/sys/kernel/printk_devkmsg", "w")) {
-        fprintf(rate, "on\n");
-        fclose(rate);
-    }
-}
-
 void BootConfig::set(const kv_pairs &kv) {
     for (const auto &[key, value] : kv) {
         if (key == "androidboot.slot_suffix") {
@@ -174,10 +125,10 @@ void BootConfig::set(const kv_pairs &kv) {
                 LOGW("Skip invalid androidboot.slot_suffix=[normal]\n");
                 continue;
             }
-            strlcpy(slot, value.data(), sizeof(slot));
+            strscpy(slot, value.data(), sizeof(slot));
         } else if (key == "androidboot.slot") {
             slot[0] = '_';
-            strlcpy(slot + 1, value.data(), sizeof(slot) - 1);
+            strscpy(slot + 1, value.data(), sizeof(slot) - 1);
         } else if (key == "skip_initramfs") {
             skip_initramfs = true;
         } else if (key == "androidboot.force_normal_boot") {
@@ -185,13 +136,13 @@ void BootConfig::set(const kv_pairs &kv) {
         } else if (key == "rootwait") {
             rootwait = true;
         } else if (key == "androidboot.android_dt_dir") {
-            strlcpy(dt_dir, value.data(), sizeof(dt_dir));
+            strscpy(dt_dir, value.data(), sizeof(dt_dir));
         } else if (key == "androidboot.hardware") {
-            strlcpy(hardware, value.data(), sizeof(hardware));
+            strscpy(hardware, value.data(), sizeof(hardware));
         } else if (key == "androidboot.hardware.platform") {
-            strlcpy(hardware_plat, value.data(), sizeof(hardware_plat));
+            strscpy(hardware_plat, value.data(), sizeof(hardware_plat));
         } else if (key == "androidboot.fstab_suffix") {
-            strlcpy(fstab_suffix, value.data(), sizeof(fstab_suffix));
+            strscpy(fstab_suffix, value.data(), sizeof(fstab_suffix));
         } else if (key == "qemu") {
             emulator = true;
         }
@@ -211,12 +162,12 @@ void BootConfig::print() {
 }
 
 #define read_dt(name, key)                                          \
-snprintf(file_name, sizeof(file_name), "%s/" name, config->dt_dir); \
+ssprintf(file_name, sizeof(file_name), "%s/" name, config->dt_dir); \
 if (access(file_name, R_OK) == 0) {                                 \
     string data = full_read(file_name);                             \
     if (!data.empty()) {                                            \
         data.pop_back();                                            \
-        strlcpy(config->key, data.data(), sizeof(config->key));     \
+        strscpy(config->key, data.data(), sizeof(config->key));     \
     }                                                               \
 }
 
@@ -231,7 +182,7 @@ void load_kernel_info(BootConfig *config) {
     mount_list.emplace_back("/sys");
 
     // Log to kernel
-    setup_klog();
+    rust::setup_klog();
 
     config->set(parse_cmdline(full_read("/proc/cmdline")));
     config->set(parse_bootconfig(full_read("/proc/bootconfig")));
@@ -245,7 +196,7 @@ void load_kernel_info(BootConfig *config) {
     });
 
     if (config->dt_dir[0] == '\0')
-        strlcpy(config->dt_dir, DEFAULT_DT_DIR, sizeof(config->dt_dir));
+        strscpy(config->dt_dir, DEFAULT_DT_DIR, sizeof(config->dt_dir));
 
     char file_name[128];
     read_dt("fstab_suffix", fstab_suffix)
@@ -262,12 +213,22 @@ bool check_two_stage() {
     if (access("/system/bin/init", F_OK) == 0)
         return true;
     // If we still have no indication, parse the original init and see what's up
-    auto init = mmap_data(backup_init());
+    mmap_data init(backup_init());
     return init.contains("selinux_setup");
 }
 
+void unxz_init(const char *init_xz, const char *init) {
+    LOGD("unxz %s -> %s\n", init_xz, init);
+    int fd = xopen(init, O_WRONLY | O_CREAT, 0777);
+    fd_stream ch(fd);
+    unxz(ch, mmap_data{init_xz});
+    close(fd);
+    clone_attr(init_xz, init);
+    unlink(init_xz);
+}
+
 const char *backup_init() {
-    if (access("/.backup/init.real", F_OK) == 0)
-        return "/.backup/init.real";
+    if (access("/.backup/init.xz", F_OK) == 0)
+        unxz_init("/.backup/init.xz", "/.backup/init");
     return "/.backup/init";
 }

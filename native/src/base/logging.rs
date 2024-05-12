@@ -1,8 +1,13 @@
+use std::fmt;
 use std::fmt::Arguments;
 use std::io::{stderr, stdout, Write};
 use std::process::exit;
 
-use crate::ffi::LogLevel;
+use num_derive::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
+
+use crate::ffi::LogLevelCxx;
+use crate::{Utf8CStr, Utf8CStrBufArr};
 
 // Ugly hack to avoid using enum
 #[allow(non_snake_case, non_upper_case_globals)]
@@ -14,18 +19,29 @@ mod LogFlag {
     pub const ExitOnError: u32 = 1 << 4;
 }
 
+#[derive(Copy, Clone, FromPrimitive, ToPrimitive)]
+#[repr(i32)]
+pub enum LogLevel {
+    ErrorCxx = LogLevelCxx::ErrorCxx.repr,
+    Error = LogLevelCxx::Error.repr,
+    Warn = LogLevelCxx::Warn.repr,
+    Info = LogLevelCxx::Info.repr,
+    Debug = LogLevelCxx::Debug.repr,
+}
+
 // We don't need to care about thread safety, because all
 // logger changes will only happen on the main thread.
 pub static mut LOGGER: Logger = Logger {
-    fmt: |_, _| {},
     write: |_, _| {},
     flags: 0,
 };
 
+type LogWriter = fn(level: LogLevel, msg: &Utf8CStr);
+pub(crate) type Formatter<'a> = &'a mut dyn fmt::Write;
+
 #[derive(Copy, Clone)]
 pub struct Logger {
-    pub fmt: fn(level: LogLevel, args: Arguments),
-    pub write: fn(level: LogLevel, msg: &[u8]),
+    pub write: LogWriter,
     pub flags: u32,
 }
 
@@ -40,19 +56,18 @@ pub fn exit_on_error(b: bool) {
 }
 
 impl LogLevel {
-    fn to_disable_flag(&self) -> u32 {
+    fn as_disable_flag(&self) -> u32 {
         match *self {
-            LogLevel::Error => LogFlag::DisableError,
+            LogLevel::Error | LogLevel::ErrorCxx => LogFlag::DisableError,
             LogLevel::Warn => LogFlag::DisableWarn,
             LogLevel::Info => LogFlag::DisableInfo,
             LogLevel::Debug => LogFlag::DisableDebug,
-            _ => 0,
         }
     }
 }
 
 pub fn set_log_level_state(level: LogLevel, enabled: bool) {
-    let flag = level.to_disable_flag();
+    let flag = level.as_disable_flag();
     unsafe {
         if enabled {
             LOGGER.flags &= !flag
@@ -62,46 +77,45 @@ pub fn set_log_level_state(level: LogLevel, enabled: bool) {
     }
 }
 
-pub fn log_with_rs(level: LogLevel, msg: &str) {
+fn log_with_writer<F: FnOnce(LogWriter)>(level: LogLevel, f: F) {
     let logger = unsafe { LOGGER };
-    if (logger.flags & level.to_disable_flag()) != 0 {
+    if (logger.flags & level.as_disable_flag()) != 0 {
         return;
     }
-    (logger.write)(level, msg.as_bytes());
-    if level == LogLevel::Error && (logger.flags & LogFlag::ExitOnError) != 0 {
+    f(logger.write);
+    if matches!(level, LogLevel::ErrorCxx) && (logger.flags & LogFlag::ExitOnError) != 0 {
         exit(1);
     }
 }
 
-pub fn log_impl(level: LogLevel, args: Arguments) {
-    let logger = unsafe { LOGGER };
-    if (logger.flags & level.to_disable_flag()) != 0 {
-        return;
+pub fn log_from_cxx(level: LogLevelCxx, msg: &Utf8CStr) {
+    if let Some(level) = LogLevel::from_i32(level.repr) {
+        log_with_writer(level, |write| write(level, msg));
     }
-    (logger.fmt)(level, args);
-    if level == LogLevel::Error && (logger.flags & LogFlag::ExitOnError) != 0 {
-        exit(1);
-    }
+}
+
+pub fn log_with_formatter<F: FnOnce(Formatter) -> fmt::Result>(level: LogLevel, f: F) {
+    log_with_writer(level, |write| {
+        let mut buf = Utf8CStrBufArr::default();
+        f(&mut buf).ok();
+        write(level, &buf);
+    });
+}
+
+pub fn log_with_args(level: LogLevel, args: Arguments) {
+    log_with_formatter(level, |w| w.write_fmt(args));
 }
 
 pub fn cmdline_logging() {
-    fn cmdline_print(level: LogLevel, args: Arguments) {
-        if level == LogLevel::Info {
-            print!("{}", args);
+    fn cmdline_write(level: LogLevel, msg: &Utf8CStr) {
+        if matches!(level, LogLevel::Info) {
+            stdout().write_all(msg.as_bytes()).ok();
         } else {
-            eprint!("{}", args);
-        }
-    }
-    fn cmdline_write(level: LogLevel, msg: &[u8]) {
-        if level == LogLevel::Info {
-            stdout().write_all(msg).ok();
-        } else {
-            stderr().write_all(msg).ok();
+            stderr().write_all(msg.as_bytes()).ok();
         }
     }
 
     let logger = Logger {
-        fmt: cmdline_print,
         write: cmdline_write,
         flags: LogFlag::ExitOnError,
     };
@@ -111,43 +125,32 @@ pub fn cmdline_logging() {
 }
 
 #[macro_export]
-macro_rules! perror {
-    ($fmt:expr) => {
-        $crate::log_impl($crate::ffi::LogLevel::Error, format_args_nl!(
-            concat!($fmt, " failed with {}: {}"),
-            crate::errno(),
-            crate::error_str()
-        ))
-    };
-    ($fmt:expr, $($args:tt)*) => {
-        $crate::log_impl($crate::ffi::LogLevel::Error, format_args_nl!(
-            concat!($fmt, " failed with {}: {}"),
-            $($args)*,
-            crate::errno(),
-            crate::error_str()
-        ))
-    };
-}
-
-#[macro_export]
 macro_rules! error {
-    ($($args:tt)+) => ($crate::log_impl($crate::ffi::LogLevel::Error, format_args_nl!($($args)+)))
+    ($($args:tt)+) => {
+        $crate::log_with_args($crate::LogLevel::Error, format_args_nl!($($args)+))
+    }
 }
 
 #[macro_export]
 macro_rules! warn {
-    ($($args:tt)+) => ($crate::log_impl($crate::ffi::LogLevel::Warn, format_args_nl!($($args)+)))
+    ($($args:tt)+) => {
+        $crate::log_with_args($crate::LogLevel::Warn, format_args_nl!($($args)+))
+    }
 }
 
 #[macro_export]
 macro_rules! info {
-    ($($args:tt)+) => ($crate::log_impl($crate::ffi::LogLevel::Info, format_args_nl!($($args)+)))
+    ($($args:tt)+) => {
+        $crate::log_with_args($crate::LogLevel::Info, format_args_nl!($($args)+))
+    }
 }
 
 #[cfg(debug_assertions)]
 #[macro_export]
 macro_rules! debug {
-    ($($args:tt)+) => ($crate::log_impl($crate::ffi::LogLevel::Debug, format_args_nl!($($args)+)))
+    ($($args:tt)+) => {
+        $crate::log_with_args($crate::LogLevel::Debug, format_args_nl!($($args)+))
+    }
 }
 
 #[cfg(not(debug_assertions))]

@@ -7,11 +7,11 @@ import com.topjohnwu.magisk.BuildConfig
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.di.ServiceLocator
+import com.topjohnwu.magisk.core.ktx.getLabel
+import com.topjohnwu.magisk.core.ktx.getPackageInfo
+import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.model.su.SuPolicy
 import com.topjohnwu.magisk.core.model.su.createSuLog
-import com.topjohnwu.magisk.ktx.getLabel
-import com.topjohnwu.magisk.ktx.getPackageInfo
-import com.topjohnwu.magisk.utils.Utils
 import kotlinx.coroutines.runBlocking
 import timber.log.Timber
 
@@ -57,17 +57,20 @@ object SuCallbackHandler {
         val toUid = data.getIntComp("to.uid", -1)
         val pid = data.getIntComp("pid", -1)
         val command = data.getString("command", "")
+        val target = data.getIntComp("target", -1)
+        val seContext = data.getString("context", "")
+        val gids = data.getString("gids", "")
 
         val pm = context.packageManager
 
         val log = runCatching {
             pm.getPackageInfo(fromUid, pid)?.let {
-                pm.createSuLog(it, toUid, pid, command, policy)
+                pm.createSuLog(it, toUid, pid, command, policy, target, seContext, gids)
             }
-        }.getOrNull() ?: createSuLog(fromUid, toUid, pid, command, policy)
+        }.getOrNull() ?: createSuLog(fromUid, toUid, pid, command, policy, target, seContext, gids)
 
         if (notify)
-            notify(context, log.action, log.appName)
+            notify(context, log.action == SuPolicy.ALLOW, log.appName)
 
         runBlocking { ServiceLocator.logRepo.insert(log) }
     }
@@ -93,7 +96,7 @@ object SuCallbackHandler {
             else
                 R.string.su_deny_toast
 
-            Utils.toast(context.getString(resId, appName), Toast.LENGTH_SHORT)
+            context.toast(context.getString(resId, appName), Toast.LENGTH_SHORT)
         }
     }
 }

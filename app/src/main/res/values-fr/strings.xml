@@ -25,8 +25,8 @@
     <string name="home_follow_title">Suivez-nous</string>
     <string name="home_item_source">Sources</string>
     <string name="home_support_content">Magisk est, et sera toujours, libre et open source. Vous pouvez cependant nous témoigner de votre soutien en envoyant un petit don.</string>
-    <string name="home_installed_version">Installé</string>
-    <string name="home_latest_version">Dernière</string>
+    <string name="home_installed_version">Version installée</string>
+    <string name="home_latest_version">Dernière version</string>
     <string name="invalid_update_channel">Canal de mise à jour invalide</string>
     <string name="uninstall_magisk_title">Désinstaller Magisk</string>
     <string name="uninstall_magisk_msg">Tous les modules seront désactivés ou supprimés !\nL’accès super‑utiliateur sera perdu !\nVos données seront potentiellement chiffrées si elles ne le sont pas déjà.</string>
@@ -46,7 +46,7 @@
     <string name="install_inactive_slot_msg">Votre appareil sera obligatoirement réamorcé à partir de l’espace (slot) actuellement inactif après son redémarrage !\nN’utilisez uniquement cette option qu’après que la mise à jour OTA a été effectuée.\nVoulez‑vous continuer ?</string>
     <string name="setup_title">Configuration supplémentaire</string>
     <string name="select_patch_file">Sélectionnez le fichier cible du correctif</string>
-    <string name="patch_file_msg">Sélectionnez une image brute (*.img) ou une archive TAR ODIN (*.tar)</string>
+    <string name="patch_file_msg">Sélectionnez une image brute (*.img) ou une archive TAR ODIN (*.tar) ou un fichier payload.bin (*.bin)</string>
     <string name="reboot_delay_toast">Redémarrage dans 5 secondes…</string>
     <string name="flash_screen_title">Installation</string>
 
@@ -88,6 +88,9 @@
     <string name="logs_cleared">Le journal a été effacé.</string>
     <string name="pid">PID : %1$d</string>
     <string name="target_uid">UID cible : %1$d</string>
+    <string name="target_pid">Montage ns PID cible: %s</string>
+    <string name="selinux_context">Contexte SELinux: %s</string>
+    <string name="supp_group">Groupe supplémentaire: %s</string>
 
     <!--SafetyNet-->
 
@@ -113,6 +116,8 @@
     <string name="suspend_text_zygisk">Module suspendu car %1$s n’est pas actif</string>
     <string name="zygisk_module_unloaded">Module Zygisk non chargé en raison d’une incompatibilité</string>
     <string name="module_empty">Aucun module installé</string>
+    <string name="confirm_install">Installer le module %1$s?</string>
+    <string name="confirm_install_title">Confirmer l’installation</string>
 
     <!--Settings -->
     <string name="settings_dark_mode_title">Mode du thème</string>
@@ -138,7 +143,7 @@
     <string name="settings_zygisk_summary">Exécuter des parties de Magisk dans le service zygote</string>
     <string name="settings_denylist_title">Imposer Liste Exclusion</string>
     <string name="settings_denylist_summary">Les processus figurant sur la liste des exclusions verront toutes les modifications de Magisk annulées.</string>
-    <string name="settings_denylist_error">Cette fonctionnalité requière %1$s pour être activée</string>
+    <string name="settings_denylist_error">Cette fonctionnalité requiert %1$s pour être activée</string>
     <string name="settings_denylist_config_title">Configurer Liste Exclusion</string>
     <string name="settings_denylist_config_summary">Sélectionner le processus à inclure dans la liste d’exclusion</string>
     <string name="settings_hosts_title">Fichier d’hôtes hors partition système</string>
@@ -165,9 +170,9 @@
     <string name="settings_su_reauth_summary">Redemander une authentification pour autoriser l’accès en super‑utilisateur après une mise à jour de l’application</string>
     <string name="settings_su_tapjack_title">Activer la protection contre le détournement du tapotement</string>
     <string name="settings_su_tapjack_summary">Le dialogue d’invite du super‑utilisateur ne répondra pas à la saisie lorsqu’il est masqué par une autre fenêtre ou une surcouche</string>
-    <string name="settings_su_biometric_title">Activer l’authentification biométrique</string>
-    <string name="settings_su_biometric_summary">Utiliser l’authentification biométrique pour autoriser les accès en super‑utilisateur</string>
-    <string name="no_biometric">L’appareil n’est pas pris en charge ou alors aucun paramètre biométrique n’est activé</string>
+    <string name="settings_su_auth_title">Authentification utilisateur</string>
+    <string name="settings_su_auth_summary">Demander l’authentification utilisateur lors de la requête super-utilisateur</string>
+    <string name="settings_su_auth_insecure">Aucun méthode d’authentification utilisateur n’est configurée sur le périphérique</string>
     <string name="settings_customization">Personnalisation</string>
     <string name="setting_add_shortcut_summary">Ajouter un joli raccourci dans l’écran d’accueil au cas où le nom et l’icône seraient difficiles à reconnaître après avoir masqué l’application</string>
     <string name="settings_doh_title">DNS sur HTTPS</string>
@@ -217,6 +222,7 @@
     <string name="restore_done">Restauration effectuée !</string>
     <string name="restore_fail">La sauvegarde par défaut n’existe pas !</string>
     <string name="setup_fail">Échec de l’installation</string>
+    <string name="env_full_fix_msg">Votre périphérique nécessite de réinstaller Magisk pour fonctionner correctement. Merci de réinstaller Magisk par l’application, le mode de récupération ne pouvant pas récupérer les informations correctement.</string>
     <string name="env_fix_title">Installation supplémentaire requise</string>
     <string name="env_fix_msg">Votre appareil a besoin d’une installation supplémentaire afin que Magisk fonctionne correctement. Voulez‑vous effectuer cette installation maintenant puis redémarrer ?</string>
     <string name="setup_msg">Configuration de l’environnement en cours…</string>
@@ -230,6 +236,7 @@
     <string name="unsupport_nonroot_stub_msg">Cette application ne peut continuer à fonctionner en étant masquée car l’accès en tant que super‑utilisateur a été perdu. Merci de restaurer l’APK originel.</string>
     <string name="unsupport_nonroot_stub_title">@string/settings_restore_app_title</string>
     <string name="external_rw_permission_denied">Permettre l’accès au stockage pour activer cette fonctionnalité</string>
+    <string name="post_notifications_denied">Permettre l’accès aux notifications pour activer cette fonctionnalité</string>
     <string name="install_unknown_denied">Autoriser "installation d’applications inconnues" pour activer cette fonctionnalité</string>
     <string name="add_shortcut_title">Ajouter un raccourci à l’écran d’accueil</string>
     <string name="add_shortcut_msg">Après avoir masqué Magisk, son nom et son icône peuvent devenir difficiles à reconnaître. Voulez‑vous ajouter un joli raccourci vers l’écran d’accueil ?</string>

@@ -1,12 +1,9 @@
 #include <base.hpp>
-#include <init-rs.hpp>
+#include <stream.hpp>
+
+#include "init-rs.hpp"
 
 using kv_pairs = std::vector<std::pair<std::string, std::string>>;
-
-// For API 28 AVD, it uses legacy SAR setup that requires
-// special hacks in magiskinit to work properly. We do not
-// necessarily want this enabled in production builds.
-#define ENABLE_AVD_HACK 0
 
 struct BootConfig {
     bool skip_initramfs;
@@ -25,18 +22,16 @@ struct BootConfig {
 
 #define DEFAULT_DT_DIR "/proc/device-tree/firmware/android"
 #define INIT_PATH  "/system/bin/init"
+#define REDIR_PATH "/data/magiskinit"
 
 extern std::vector<std::string> mount_list;
 
 int magisk_proxy_main(int argc, char *argv[]);
-bool unxz(int fd, const uint8_t *buf, size_t size);
+bool unxz(out_stream &strm, rust::Slice<const uint8_t> bytes);
 void load_kernel_info(BootConfig *config);
 bool check_two_stage();
-void setup_klog();
 const char *backup_init();
 void restore_ramdisk_init();
-int dump_manager(const char *path, mode_t mode);
-int dump_preload(const char *path, mode_t mode);
 
 /***************
  * Base classes
@@ -48,6 +43,7 @@ protected:
     char **argv = nullptr;
 
     [[noreturn]] void exec_init();
+    void prepare_data();
 public:
     BaseInit(char *argv[], BootConfig *config = nullptr) : config(config), argv(argv) {}
     virtual ~BaseInit() = default;
@@ -56,34 +52,17 @@ public:
 
 class MagiskInit : public BaseInit {
 private:
-    void mount_rules_dir();
-protected:
-    mmap_data self;
-    mmap_data magisk_cfg;
-    std::string custom_rules_dir;
+    std::string preinit_dev;
 
-#if ENABLE_AVD_HACK
-    // When this boolean is set, this means we are currently
-    // running magiskinit on legacy SAR AVD emulator
-    bool avd_hack = false;
-#endif
-
+    void parse_config_file();
     void patch_sepolicy(const char *in, const char *out);
     bool hijack_sepolicy();
     void setup_tmp(const char *path);
-    void patch_rw_root();
-public:
-    using BaseInit::BaseInit;
-};
-
-class SARBase : public MagiskInit {
 protected:
-    std::vector<raw_file> overlays;
-
-    void backup_files();
+    void patch_rw_root();
     void patch_ro_root();
 public:
-    using MagiskInit::MagiskInit;
+    using BaseInit::BaseInit;
 };
 
 /***************
@@ -103,17 +82,17 @@ public:
     }
 };
 
-class SecondStageInit : public SARBase {
+class SecondStageInit : public MagiskInit {
 private:
     bool prepare();
 public:
-    SecondStageInit(char *argv[]) : SARBase(argv) {
-        setup_klog();
+    SecondStageInit(char *argv[]) : MagiskInit(argv) {
         LOGD("%s\n", __FUNCTION__);
     };
 
     void start() override {
-        if (prepare())
+        bool is_rootfs = prepare();
+        if (is_rootfs)
             patch_rw_root();
         else
             patch_ro_root();
@@ -125,16 +104,18 @@ public:
  * Legacy SAR
  *************/
 
-class LegacySARInit : public SARBase {
+class LegacySARInit : public MagiskInit {
 private:
     bool mount_system_root();
     void first_stage_prep();
 public:
-    LegacySARInit(char *argv[], BootConfig *config) : SARBase(argv, config) {
+    LegacySARInit(char *argv[], BootConfig *config) : MagiskInit(argv, config) {
         LOGD("%s\n", __FUNCTION__);
     };
     void start() override {
-        if (mount_system_root())
+        prepare_data();
+        bool is_two_stage = mount_system_root();
+        if (is_two_stage)
             first_stage_prep();
         else
             patch_ro_root();

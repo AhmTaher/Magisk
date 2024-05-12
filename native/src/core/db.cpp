@@ -2,10 +2,10 @@
 #include <dlfcn.h>
 #include <sys/stat.h>
 
-#include <magisk.hpp>
-#include <db.hpp>
-#include <socket.hpp>
+#include <consts.hpp>
 #include <base.hpp>
+#include <db.hpp>
+#include <core.hpp>
 
 #define DB_VERSION 12
 
@@ -116,7 +116,7 @@ db_settings::db_settings() {
     data[SU_MULTIUSER_MODE] = MULTIUSER_MODE_OWNER_ONLY;
     data[SU_MNT_NS] = NAMESPACE_MODE_REQUESTER;
     data[DENYLIST_CONFIG] = false;
-    data[ZYGISK_CONFIG] = false;
+    data[ZYGISK_CONFIG] = MagiskD::get()->is_emulator();
 }
 
 int db_settings::get_idx(string_view key) const {
@@ -332,7 +332,7 @@ int get_db_settings(db_settings &cfg, int key) {
     };
     if (key >= 0) {
         char query[128];
-        snprintf(query, sizeof(query), "SELECT * FROM settings WHERE key='%s'", DB_SETTING_KEYS[key]);
+        ssprintf(query, sizeof(query), "SELECT * FROM settings WHERE key='%s'", DB_SETTING_KEYS[key]);
         err = db_exec(query, settings_cb);
     } else {
         err = db_exec("SELECT * FROM settings", settings_cb);
@@ -350,7 +350,7 @@ int get_db_strings(db_strings &str, int key) {
     };
     if (key >= 0) {
         char query[128];
-        snprintf(query, sizeof(query), "SELECT * FROM strings WHERE key='%s'", DB_STRING_KEYS[key]);
+        ssprintf(query, sizeof(query), "SELECT * FROM strings WHERE key='%s'", DB_STRING_KEYS[key]);
         err = db_exec(query, string_cb);
     } else {
         err = db_exec("SELECT * FROM strings", string_cb);
@@ -362,7 +362,7 @@ int get_db_strings(db_strings &str, int key) {
 void rm_db_strings(int key) {
     char *err;
     char query[128];
-    snprintf(query, sizeof(query), "DELETE FROM strings WHERE key == '%s'", DB_STRING_KEYS[key]);
+    ssprintf(query, sizeof(query), "DELETE FROM strings WHERE key == '%s'", DB_STRING_KEYS[key]);
     err = db_exec(query);
     db_err_cmd(err, return);
 }

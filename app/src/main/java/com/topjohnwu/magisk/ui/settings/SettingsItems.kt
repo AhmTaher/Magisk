@@ -12,10 +12,8 @@ import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
-import com.topjohnwu.magisk.core.JobService
-import com.topjohnwu.magisk.core.di.AppContext
+import com.topjohnwu.magisk.core.ktx.activity
 import com.topjohnwu.magisk.core.tasks.HideAPK
-import com.topjohnwu.magisk.core.utils.BiometricHelper
 import com.topjohnwu.magisk.core.utils.MediaStoreUtils
 import com.topjohnwu.magisk.core.utils.availableLocales
 import com.topjohnwu.magisk.core.utils.currentLocale
@@ -23,7 +21,6 @@ import com.topjohnwu.magisk.databinding.DialogSettingsAppNameBinding
 import com.topjohnwu.magisk.databinding.DialogSettingsDownloadPathBinding
 import com.topjohnwu.magisk.databinding.DialogSettingsUpdateChannelBinding
 import com.topjohnwu.magisk.databinding.set
-import com.topjohnwu.magisk.utils.Utils
 import com.topjohnwu.magisk.utils.asText
 import com.topjohnwu.magisk.view.MagiskDialog
 import com.topjohnwu.superuser.Shell
@@ -111,7 +108,7 @@ object Restore : BaseSettingsItem.Blank() {
 
     override fun onPressed(view: View, handler: Handler) {
         handler.onItemPressed(view, this) {
-            MagiskDialog(view.context).apply {
+            MagiskDialog(view.activity).apply {
                 setTitle(R.string.settings_restore_app_title)
                 setMessage(R.string.restore_app_confirmation)
                 setButton(MagiskDialog.ButtonType.POSITIVE) {
@@ -201,12 +198,7 @@ object UpdateChannelUrl : BaseSettingsItem.Input() {
 object UpdateChecker : BaseSettingsItem.Toggle() {
     override val title = R.string.settings_check_update_title.asText()
     override val description = R.string.settings_check_update_summary.asText()
-    override var value
-        get() = Config.checkUpdate
-        set(value) {
-            Config.checkUpdate = value
-            JobService.schedule(AppContext)
-        }
+    override var value by Config::checkUpdate
 }
 
 object DoHToggle : BaseSettingsItem.Toggle() {
@@ -235,25 +227,14 @@ object Zygisk : BaseSettingsItem.Toggle() {
         get() = Config.zygisk
         set(value) {
             Config.zygisk = value
-            DenyList.isEnabled = value
-            DenyListConfig.isEnabled = value
             notifyPropertyChanged(BR.description)
-            DenyList.notifyPropertyChanged(BR.description)
         }
     val mismatch get() = value != Info.isZygiskEnabled
 }
 
 object DenyList : BaseSettingsItem.Toggle() {
     override val title = R.string.settings_denylist_title.asText()
-    override val description get() =
-        if (isEnabled) {
-            if (Zygisk.mismatch)
-                R.string.reboot_apply_change.asText()
-            else
-                R.string.settings_denylist_summary.asText()
-        } else {
-            R.string.settings_denylist_error.asText(R.string.zygisk.asText())
-        }
+    override val description get() = R.string.settings_denylist_summary.asText()
 
     override var value = Config.denyList
         set(value) {
@@ -268,18 +249,11 @@ object DenyList : BaseSettingsItem.Toggle() {
                 }
             }
         }
-
-    override fun refresh() {
-        isEnabled = Zygisk.value
-    }
 }
 
 object DenyListConfig : BaseSettingsItem.Blank() {
     override val title = R.string.settings_denylist_config_title.asText()
     override val description = R.string.settings_denylist_config_summary.asText()
-    override fun refresh() {
-        isEnabled = Zygisk.value
-    }
 }
 
 // --- Superuser
@@ -290,17 +264,15 @@ object Tapjack : BaseSettingsItem.Toggle() {
     override var value by Config::suTapjack
 }
 
-object Biometrics : BaseSettingsItem.Toggle() {
-    override val title = R.string.settings_su_biometric_title.asText()
-    override var description = R.string.settings_su_biometric_summary.asText()
-    override var value by Config::suBiometric
+object Authentication : BaseSettingsItem.Toggle() {
+    override val title = R.string.settings_su_auth_title.asText()
+    override var description = R.string.settings_su_auth_summary.asText()
+    override var value by Config::userAuth
 
     override fun refresh() {
-        isEnabled = BiometricHelper.isSupported
+        isEnabled = Info.isDeviceSecure
         if (!isEnabled) {
-            value = false
-            description = R.string.no_biometric.asText()
-            notifyPropertyChanged(BR.checked)
+            description = R.string.settings_su_auth_insecure.asText()
         }
     }
 }
@@ -363,6 +335,6 @@ object Reauthenticate : BaseSettingsItem.Toggle() {
     override var value by Config::suReAuth
 
     override fun refresh() {
-        isEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O && Utils.showSuperUser()
+        isEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O && Info.showSuperUser
     }
 }

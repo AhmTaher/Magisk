@@ -1,6 +1,6 @@
 package com.topjohnwu.magisk.view
 
-import android.content.Context
+import android.app.Activity
 import android.content.DialogInterface
 import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
@@ -21,22 +21,33 @@ import com.google.android.material.color.MaterialColors
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.topjohnwu.magisk.BR
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.databinding.*
+import com.topjohnwu.magisk.core.base.BaseActivity
+import com.topjohnwu.magisk.databinding.DialogMagiskBaseBinding
+import com.topjohnwu.magisk.databinding.DiffItem
+import com.topjohnwu.magisk.databinding.ItemWrapper
+import com.topjohnwu.magisk.databinding.ObservableHost
+import com.topjohnwu.magisk.databinding.RvItem
+import com.topjohnwu.magisk.databinding.bindExtra
+import com.topjohnwu.magisk.databinding.set
+import com.topjohnwu.magisk.databinding.setAdapter
 import com.topjohnwu.magisk.view.MagiskDialog.DialogClickListener
 
 typealias DialogButtonClickListener = (DialogInterface) -> Unit
 
 class MagiskDialog(
-    context: Context, theme: Int = 0
+    context: Activity, theme: Int = 0
 ) : AppCompatDialog(context, theme) {
 
     private val binding: DialogMagiskBaseBinding =
         DialogMagiskBaseBinding.inflate(LayoutInflater.from(context))
     private val data = Data()
 
+    val activity: BaseActivity get() = ownerActivity as BaseActivity
+
     init {
         binding.setVariable(BR.data, data)
         setCancelable(true)
+        setOwnerActivity(context)
     }
 
     inner class Data : ObservableHost {
@@ -162,7 +173,7 @@ class MagiskDialog(
     class DialogItem(
         override val item: CharSequence,
         val position: Int
-    ) : DiffRvItem<DialogItem>(), RvContainer<CharSequence> {
+    ) : RvItem(), DiffItem<DialogItem>, ItemWrapper<CharSequence> {
         override val layoutRes = R.layout.item_list_single_line
     }
 

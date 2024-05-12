@@ -4,7 +4,11 @@ import com.topjohnwu.magisk.core.model.BranchInfo
 import com.topjohnwu.magisk.core.model.ModuleJson
 import com.topjohnwu.magisk.core.model.UpdateInfo
 import okhttp3.ResponseBody
-import retrofit2.http.*
+import retrofit2.http.GET
+import retrofit2.http.Headers
+import retrofit2.http.Path
+import retrofit2.http.Streaming
+import retrofit2.http.Url
 
 private const val BRANCH = "branch"
 private const val REPO = "repo"
@@ -12,14 +16,11 @@ private const val FILE = "file"
 
 interface GithubPageServices {
 
-    @GET("{$FILE}")
-    suspend fun fetchUpdateJSON(@Path(FILE) file: String): UpdateInfo
+    @GET
+    suspend fun fetchUpdateJSON(@Url file: String): UpdateInfo
 }
 
 interface RawServices {
-
-    @GET
-    suspend fun fetchCustomUpdate(@Url url: String): UpdateInfo
 
     @GET
     @Streaming

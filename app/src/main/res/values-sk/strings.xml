@@ -20,7 +20,7 @@
     <string name="home_package">Balíček</string>
     <string name="home_app_title">App</string>
 
-    <string name="home_notice_content">Magisk sťahujte IBA z oficiálnej stránky na GitHubé. Súbory z neznámych zdrojov môžu byť škodlivé!</string>
+    <string name="home_notice_content">Magisk sťahujte IBA z oficiálnej stránky na GitHube. Súbory z neznámych zdrojov môžu byť škodlivé!</string>
     <string name="home_support_title">Podporte nás</string>
     <string name="home_follow_title">Sledujte nás</string>
     <string name="home_item_source">Zdroj</string>
@@ -46,7 +46,7 @@
     <string name="install_inactive_slot_msg">Vaše zariadenie bude po reštarte PRINÚTENÉ nabootovať do aktuálne neaktívneho slotu!\nTúto voľbu použite iba po skončení OTA.\nPokračovať?</string>
     <string name="setup_title">Ďalšie nastavenia</string>
     <string name="select_patch_file">Vybrať a zaplátať súbor</string>
-    <string name="patch_file_msg">Vyberte raw súbor (*.img) alebo tar súbor ODIN (*.tar)</string>
+    <string name="patch_file_msg">Vyberte raw súbor (*.img) alebo tar súbor ODIN (*.tar) alebo payload.bin (*.bin)</string>
     <string name="reboot_delay_toast">Reštart o 5 sekúnd…</string>
     <string name="flash_screen_title">Inštalácia</string>
 
@@ -87,7 +87,10 @@
     <string name="menuClearLog">Odstrániť záznam</string>
     <string name="logs_cleared">Záznam úspešne odstránený</string>
     <string name="pid">PID:%1$d</string>
-    <string name="target_uid">Cieľový UID: %1$d</string>
+    <string name="target_uid">Cieľové UID: %1$d</string>
+    <string name="target_pid">Pripojiť ns cieľový PID: %s</string>
+    <string name="selinux_context">SELinux kontext: %s</string>
+    <string name="supp_group">Doplnková skupina: %s</string>
 
     <!--SafetyNet-->
 
@@ -113,6 +116,8 @@
     <string name="suspend_text_zygisk">Modul bol pozastavený, lebo %1$s nie je povolené</string>
     <string name="zygisk_module_unloaded">Modul Zygisk sa nenačítal z dôvodu nekompatibility</string>
     <string name="module_empty">Nie je nainštalovaný žiadny modul</string>
+    <string name="confirm_install">Nainštalovať modul %1$s?</string>
+    <string name="confirm_install_title">Potvrdenie inštalácie</string>
 
     <!--Settings-->
     <string name="settings_dark_mode_title">Režim motívu</string>
@@ -165,9 +170,9 @@
     <string name="settings_su_reauth_summary">Opätovne vyzve na udelenie oprávnení Superužívateľa po upgrade aplikácie</string>
     <string name="settings_su_tapjack_title">Ochrana pred tapjackingom</string>
     <string name="settings_su_tapjack_summary">Dialógové okno superužívateľa nebude reagovať na zadanie, ak je zakryté alebo prekryté iným oknom</string>
-    <string name="settings_su_biometric_title">Biometrické overenie</string>
-    <string name="settings_su_biometric_summary">Použije biometrickú autentifikáciu na povolenie žiadostí superužívateľa</string>
-    <string name="no_biometric">Nepodporované zariadenie alebo žiadne biometrické nastavenia nie sú povolené</string>
+    <string name="settings_su_auth_title">Overenie používateľa</string>
+    <string name="settings_su_auth_summary">Žiadosť o overenie používateľa počas požiadaviek Superužívateľa</string>
+    <string name="settings_su_auth_insecure">V zariadení nie je nakonfigurovaná žiadna metóda overovania</string>
     <string name="settings_customization">Prispôsobenie</string>
     <string name="setting_add_shortcut_summary">V prípade, že sa po skrytí apky názov a ikona ťažko rozpoznávajú, pridať na domovskú obrazovku odkaz</string>
     <string name="settings_doh_title">DNS over HTTPS</string>
@@ -219,6 +224,7 @@
     <string name="setup_fail">Nastavenie zlyhalo</string>
     <string name="env_fix_title">Vyžaduje sa ďalšie nastavenie</string>
     <string name="env_fix_msg">Aby Magisk fungoval správne, vaše zariadenie potrebuje ďalšie nastavenie. Chcete pokračovať a reštartovať?</string>
+    <string name="env_full_fix_msg">Vaše zariadenie potrebuje na správne fungovanie reflash Magisku. Preinštalujte Magisk priamo z aplikácie, režim obnovenia nemôže získať správne informácie o zariadení.</string>
     <string name="setup_msg">Nastavenie je spustené…</string>
     <string name="authenticate">Autentifikovať</string>
     <string name="unsupport_magisk_title">Nepodporovaná verzia Magisku</string>
@@ -229,7 +235,8 @@
     <string name="unsupport_external_storage_msg">Magisk je nainštalovaný na externom úložisku. Prosím, presuňte apku na interné úložisko.</string>
     <string name="unsupport_nonroot_stub_msg">Skrytá aplikácia Magisk nemôže pokračovať v práci, lebo root sa stratil. Prosím, obnovte ju z pôvodného súboru APK.</string>
     <string name="unsupport_nonroot_stub_title">@string/settings_restore_app_title</string>
-    <string name="external_rw_permission_denied">Udeľte povolenie pre povolenie tejto funkcie</string>
+    <string name="external_rw_permission_denied">Udeľte povolenie na zapnutie tejto funkcie</string>
+    <string name="post_notifications_denied">Udeľte upozorneniam povolenie na zapnutie tejto funkcie</string>
     <string name="install_unknown_denied">Povoľte "inštaláciu neznámych aplikácii" na povolenie tejto funkcie</string>
     <string name="add_shortcut_title">Pridať odkaz na domovskú obrazovku</string>
     <string name="add_shortcut_msg">Po skrytí tejto aplikácie sa jej názov a ikona môžu stať ťažko rozoznateľnými. Chcete pridať krajší odkaz na domovskú obrazovku?</string>

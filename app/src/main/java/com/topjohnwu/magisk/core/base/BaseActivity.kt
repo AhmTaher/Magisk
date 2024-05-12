@@ -1,5 +1,6 @@
 package com.topjohnwu.magisk.core.base
 
+import android.Manifest.permission.POST_NOTIFICATIONS
 import android.Manifest.permission.REQUEST_INSTALL_PACKAGES
 import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.app.Activity
@@ -17,10 +18,11 @@ import androidx.activity.result.contract.ActivityResultContracts.RequestPermissi
 import androidx.appcompat.app.AppCompatActivity
 import com.topjohnwu.magisk.R
 import com.topjohnwu.magisk.core.isRunningAsStub
+import com.topjohnwu.magisk.core.ktx.reflectField
+import com.topjohnwu.magisk.core.ktx.toast
+import com.topjohnwu.magisk.core.utils.RequestAuthentication
 import com.topjohnwu.magisk.core.utils.RequestInstall
 import com.topjohnwu.magisk.core.wrap
-import com.topjohnwu.magisk.ktx.reflectField
-import com.topjohnwu.magisk.utils.Utils
 
 interface ContentResultCallback: ActivityResultCallback<Uri>, Parcelable {
     fun onActivityLaunch() {}
@@ -35,9 +37,17 @@ abstract class BaseActivity : AppCompatActivity() {
         permissionCallback?.invoke(it)
         permissionCallback = null
     }
+
+    private var installCallback: ((Boolean) -> Unit)? = null
     private val requestInstall = registerForActivityResult(RequestInstall()) {
-        permissionCallback?.invoke(it)
-        permissionCallback = null
+        installCallback?.invoke(it)
+        installCallback = null
+    }
+
+    var authenticateCallback: ((Boolean) -> Unit)? = null
+    val requestAuthenticate = registerForActivityResult(RequestAuthentication()) {
+        authenticateCallback?.invoke(it)
+        authenticateCallback = null
     }
 
     private var contentCallback: ContentResultCallback? = null
@@ -52,9 +62,7 @@ abstract class BaseActivity : AppCompatActivity() {
 
     val realCallingPackage: String? get() {
         callingPackage?.let { return it }
-        if (Build.VERSION.SDK_INT >= 22) {
-            mReferrerField.get(this)?.let { return it as String }
-        }
+        mReferrerField.get(this)?.let { return it as String }
         return null
     }
 
@@ -67,8 +75,8 @@ abstract class BaseActivity : AppCompatActivity() {
             // Overwrite private members to avoid nasty "false" stack traces being logged
             val delegate = delegate
             val clz = delegate.javaClass
-            clz.reflectField("mActivityHandlesUiModeChecked").set(delegate, true)
-            clz.reflectField("mActivityHandlesUiMode").set(delegate, false)
+            clz.reflectField("mActivityHandlesConfigFlagsChecked").set(delegate, true)
+            clz.reflectField("mActivityHandlesConfigFlags").set(delegate, 0)
         }
         contentCallback = savedInstanceState?.getParcelable(CONTENT_CALLBACK_KEY)
         super.onCreate(savedInstanceState)
@@ -82,15 +90,23 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     fun withPermission(permission: String, callback: (Boolean) -> Unit) {
-        if (permission == WRITE_EXTERNAL_STORAGE && Build.VERSION.SDK_INT >= 30) {
-            // We do not need external rw on 30+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            permission == WRITE_EXTERNAL_STORAGE) {
+            // We do not need external rw on R+
             callback(true)
             return
         }
-        permissionCallback = callback
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU &&
+            permission == POST_NOTIFICATIONS) {
+            // All apps have notification permissions before T
+            callback(true)
+            return
+        }
         if (permission == REQUEST_INSTALL_PACKAGES) {
+            installCallback = callback
             requestInstall.launch(Unit)
         } else {
+            permissionCallback = callback
             requestPermission.launch(permission)
         }
     }
@@ -101,7 +117,7 @@ abstract class BaseActivity : AppCompatActivity() {
             getContent.launch(type)
             callback.onActivityLaunch()
         } catch (e: ActivityNotFoundException) {
-            Utils.toast(R.string.app_not_found, Toast.LENGTH_SHORT)
+            toast(R.string.app_not_found, Toast.LENGTH_SHORT)
         }
     }
 

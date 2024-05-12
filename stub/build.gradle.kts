@@ -1,11 +1,12 @@
 plugins {
     id("com.android.application")
-    id("io.michaelrocks.paranoid")
+    id("org.lsposed.lsparanoid")
 }
 
-paranoid {
-    obfuscationSeed = if (RAND_SEED != 0) RAND_SEED else null
-    includeSubprojects = true
+lsparanoid {
+    seed = if (RAND_SEED != 0) RAND_SEED else null
+    includeDependencies = true
+    global = true
 }
 
 android {
@@ -20,7 +21,6 @@ android {
         applicationId = "com.topjohnwu.magisk"
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("int", "STUB_VERSION", Config.stubVersion)
         buildConfigField("String", "APK_URL", url?.let { "\"$it\"" } ?: "null" )
     }
 

@@ -15,8 +15,7 @@ object Const {
         else Build.SUPPORTED_32_BIT_ABIS.firstOrNull()
 
     // Paths
-    lateinit var MAGISKTMP: String
-    val MAGISK_PATH get() = "$MAGISKTMP/modules"
+    const val MAGISK_PATH  = "/data/adb/modules"
     const val TMPDIR = "/dev/tmp"
     const val MAGISK_LOG = "/cache/magisk.log"
 
@@ -36,7 +35,8 @@ object Const {
     }
 
     object ID {
-        const val JOB_SERVICE_ID = 7
+        const val DOWNLOAD_JOB_ID = 6
+        const val CHECK_UPDATE_JOB_ID = 7
     }
 
     object Url {

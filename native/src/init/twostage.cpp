@@ -1,81 +1,78 @@
 #include <sys/mount.h>
 
-#include <magisk.hpp>
+#include <consts.hpp>
 #include <base.hpp>
-#include <socket.hpp>
+#include <sys/vfs.h>
 
 #include "init.hpp"
 
 using namespace std;
 
-#define REDIR_PATH "/data/magiskinit"
-
 void FirstStageInit::prepare() {
-    xmkdirs("/data", 0755);
-    xmount("tmpfs", "/data", "tmpfs", 0, "mode=755");
-    cp_afc("/init" /* magiskinit */, REDIR_PATH);
+    prepare_data();
 
-    restore_ramdisk_init();
-
-    {
+    if (struct stat st{}; fstatat(-1, "/sdcard", &st, AT_SYMLINK_NOFOLLOW) != 0 &&
+        fstatat(-1, "/first_stage_ramdisk/sdcard", &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        if (config->force_normal_boot) {
+            xmkdirs("/first_stage_ramdisk/storage/self", 0755);
+            xsymlink("/system/system/bin/init", "/first_stage_ramdisk/storage/self/primary");
+            LOGD("Symlink /first_stage_ramdisk/storage/self/primary -> /system/system/bin/init\n");
+            close(xopen("/first_stage_ramdisk/sdcard", O_RDONLY | O_CREAT | O_CLOEXEC, 0));
+        } else {
+            xmkdirs("/storage/self", 0755);
+            xsymlink("/system/system/bin/init", "/storage/self/primary");
+            LOGD("Symlink /storage/self/primary -> /system/system/bin/init\n");
+        }
+        xrename("/init", "/sdcard");
+        // Try to keep magiskinit in rootfs for samsung RKP
+        if (mount("/sdcard", "/sdcard", nullptr, MS_BIND, nullptr) == 0) {
+            LOGD("Bind mount /sdcard -> /sdcard\n");
+        } else {
+            // rootfs before 3.12
+            xmount("/data/magiskinit", "/sdcard", nullptr, MS_BIND, nullptr);
+            LOGD("Bind mount /sdcard -> /data/magiskinit\n");
+        }
+        restore_ramdisk_init();
+    } else {
+        restore_ramdisk_init();
+        // fallback to hexpatch if /sdcard exists
         auto init = mmap_data("/init", true);
         // Redirect original init to magiskinit
-        init.patch({ make_pair(INIT_PATH, REDIR_PATH) });
+        for (size_t off : init.patch(INIT_PATH, REDIR_PATH)) {
+            LOGD("Patch @ %08zX [" INIT_PATH "] -> [" REDIR_PATH "]\n", off);
+        }
     }
-
-    // Copy files to tmpfs
-    cp_afc(".backup", "/data/.backup");
-    cp_afc("overlay.d", "/data/overlay.d");
 }
 
 void LegacySARInit::first_stage_prep() {
-    xmkdir("/data", 0755);
-    xmount("tmpfs", "/data", "tmpfs", 0, "mode=755");
-
     // Patch init binary
     int src = xopen("/init", O_RDONLY);
     int dest = xopen("/data/init", O_CREAT | O_WRONLY, 0);
     {
-        auto init = mmap_data("/init");
-        init.patch({ make_pair(INIT_PATH, REDIR_PATH) });
-        write(dest, init.buf, init.sz);
+        mmap_data init("/init");
+        for (size_t off : init.patch(INIT_PATH, REDIR_PATH)) {
+            LOGD("Patch @ %08zX [" INIT_PATH "] -> [" REDIR_PATH "]\n", off);
+        }
+        write(dest, init.buf(), init.sz());
         fclone_attr(src, dest);
         close(dest);
+        close(src);
     }
     xmount("/data/init", "/init", nullptr, MS_BIND, nullptr);
-
-    // Replace redirect init with magiskinit
-    dest = xopen(REDIR_PATH, O_CREAT | O_WRONLY, 0);
-    write(dest, self.buf, self.sz);
-    fclone_attr(src, dest);
-    close(src);
-    close(dest);
-
-    // Copy files to tmpfs
-    xmkdir("/data/.backup", 0);
-    xmkdir("/data/overlay.d", 0);
-    restore_folder("/data/overlay.d", overlays);
-    int cfg = xopen("/data/.backup/.magisk", O_WRONLY | O_CREAT, 0);
-    xwrite(cfg, magisk_cfg.buf, magisk_cfg.sz);
-    close(cfg);
 }
 
 bool SecondStageInit::prepare() {
-    backup_files();
-
     umount2("/init", MNT_DETACH);
-    umount2("/proc/self/exe", MNT_DETACH);
-    umount2("/data", MNT_DETACH);
+    umount2(INIT_PATH, MNT_DETACH); // just in case
+    unlink("/data/init");
 
     // Make sure init dmesg logs won't get messed up
     argv[0] = (char *) INIT_PATH;
 
     // Some weird devices like meizu, uses 2SI but still have legacy rootfs
-    // Check if root and system are on different filesystems
-    struct stat root{}, system{};
-    xstat("/", &root);
-    xstat("/system", &system);
-    if (root.st_dev != system.st_dev) {
+    struct statfs sfs{};
+    statfs("/", &sfs);
+    if (sfs.f_type == RAMFS_MAGIC || sfs.f_type == TMPFS_MAGIC) {
         // We are still on rootfs, so make sure we will execute the init of the 2nd stage
         unlink("/init");
         xsymlink(INIT_PATH, "/init");

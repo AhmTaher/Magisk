@@ -13,13 +13,13 @@ import com.topjohnwu.magisk.core.Const
 import com.topjohnwu.magisk.core.Info
 import com.topjohnwu.magisk.core.di.AppContext
 import com.topjohnwu.magisk.core.isRunningAsStub
+import com.topjohnwu.magisk.core.ktx.activity
+import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.tasks.HideAPK
 import com.topjohnwu.magisk.databinding.bindExtra
 import com.topjohnwu.magisk.events.AddHomeIconEvent
+import com.topjohnwu.magisk.events.AuthEvent
 import com.topjohnwu.magisk.events.SnackbarEvent
-import com.topjohnwu.magisk.events.dialog.BiometricEvent
-import com.topjohnwu.magisk.ktx.activity
-import com.topjohnwu.magisk.utils.Utils
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.launch
 
@@ -53,7 +53,7 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
             AppSettings,
             UpdateChannel, UpdateChannelUrl, DoHToggle, UpdateChecker, DownloadPath
         ))
-        if (Build.VERSION.SDK_INT >= 22 && Info.env.isActive && Const.USER_ID == 0) {
+        if (Info.env.isActive && Const.USER_ID == 0) {
             if (hidden) list.add(Restore) else list.add(Hide)
         }
 
@@ -69,21 +69,17 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
         }
 
         // Superuser
-        if (Utils.showSuperUser()) {
+        if (Info.showSuperUser) {
             list.addAll(listOf(
                 Superuser,
-                Tapjack, Biometrics, AccessMode, MultiuserMode, MountNamespaceMode,
+                Tapjack, Authentication, AccessMode, MultiuserMode, MountNamespaceMode,
                 AutomaticResponse, RequestTimeout, SUNotification
             ))
-            if (Build.VERSION.SDK_INT < 23) {
-                // Biometric is only available on 6.0+
-                list.remove(Biometrics)
-            }
-            if (Build.VERSION.SDK_INT < 26) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
                 // Re-authenticate is not feasible on 8.0+
                 list.add(Reauthenticate)
             }
-            if (Build.VERSION.SDK_INT >= 31) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 // Can hide overlay windows on 12.0+
                 list.remove(Tapjack)
             }
@@ -95,7 +91,8 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
     override fun onItemPressed(view: View, item: BaseSettingsItem, andThen: () -> Unit) {
         when (item) {
             DownloadPath -> withExternalRW(andThen)
-            Biometrics -> authenticate(andThen)
+            UpdateChecker -> withPostNotificationPermission(andThen)
+            Authentication -> AuthEvent(andThen).publish()
             Theme -> SettingsFragmentDirections.actionSettingsFragmentToThemeFragment().navigate()
             DenyListConfig -> SettingsFragmentDirections.actionSettingsFragmentToDenyFragment().navigate()
             SystemlessHosts -> createHosts()
@@ -122,16 +119,9 @@ class SettingsViewModel : BaseViewModel(), BaseSettingsItem.Handler {
         }
     }
 
-    private fun authenticate(callback: () -> Unit) {
-        BiometricEvent {
-            // allow the change on success
-            onSuccess { callback() }
-        }.publish()
-    }
-
     private fun createHosts() {
         Shell.cmd("add_hosts_module").submit {
-            Utils.toast(R.string.settings_hosts_toast, Toast.LENGTH_SHORT)
+            AppContext.toast(R.string.settings_hosts_toast, Toast.LENGTH_SHORT)
         }
     }
 }

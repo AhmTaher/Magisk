@@ -45,9 +45,6 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import io.michaelrocks.paranoid.Obfuscate;
-
-@Obfuscate
 public class DownloadActivity extends Activity {
 
     private static final String APP_NAME = "Magisk";
@@ -86,7 +83,7 @@ public class DownloadActivity extends Activity {
         ProviderInstaller.install(this);
 
         if (Networking.checkNetworkStatus(this)) {
-            if (apkLink == null) {
+            if (BuildConfig.APK_URL == null) {
                 fetchCanary();
             } else {
                 showDialog();
@@ -162,47 +159,43 @@ public class DownloadActivity extends Activity {
     }
 
     private void decryptResources(OutputStream out) throws Exception {
-        try (var zip = new ZipOutputStream(out)) {
-            zip.putNextEntry(new ZipEntry("resources.arsc"));
-            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-            SecretKey key = new SecretKeySpec(Bytes.key(), "AES");
-            IvParameterSpec iv = new IvParameterSpec(Bytes.iv());
-            cipher.init(Cipher.DECRYPT_MODE, key, iv);
-            var is = new InflaterInputStream(new CipherInputStream(
-                    new ByteArrayInputStream(Bytes.res()), cipher));
-            try (is) {
-                APKInstall.transfer(is, zip);
-            }
-            zip.closeEntry();
-
-            zip.putNextEntry(new ZipEntry("AndroidManifest.xml"));
-            var apk = new ZipFile(getPackageResourcePath());
-            var xml = apk.getInputStream(apk.getEntry("AndroidManifest.xml"));
-            try (apk; xml) {
-                APKInstall.transfer(xml, zip);
-            }
-            zip.closeEntry();
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        SecretKey key = new SecretKeySpec(Bytes.key(), "AES");
+        IvParameterSpec iv = new IvParameterSpec(Bytes.iv());
+        cipher.init(Cipher.DECRYPT_MODE, key, iv);
+        var is = new InflaterInputStream(new CipherInputStream(
+                new ByteArrayInputStream(Bytes.res()), cipher));
+        try (is; out) {
+            APKInstall.transfer(is, out);
         }
     }
 
     private void loadResources() throws Exception {
-        if (Build.VERSION.SDK_INT >= 30) {
-            var fd = Os.memfd_create("res.apk", 0);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            var fd = Os.memfd_create("res", 0);
             try {
                 decryptResources(new FileOutputStream(fd));
                 Os.lseek(fd, 0, OsConstants.SEEK_SET);
+                var loader = new ResourcesLoader();
                 try (var pfd = ParcelFileDescriptor.dup(fd)) {
-                    var loader = new ResourcesLoader();
-                    loader.addProvider(ResourcesProvider.loadFromApk(pfd));
+                    loader.addProvider(ResourcesProvider.loadFromTable(pfd, null));
                     getResources().addLoaders(loader);
                 }
             } finally {
                 Os.close(fd);
             }
         } else {
-            File apk = new File(getCacheDir(), "res.apk");
-            decryptResources(new FileOutputStream(apk));
-            StubApk.addAssetPath(getResources(), apk.getPath());
+            File res = new File(getCodeCacheDir(), "res.apk");
+            try (var out = new ZipOutputStream(new FileOutputStream(res))) {
+                // AndroidManifest.xml is reuqired on Android 6-, and directory support is broken on Android 9-10
+                out.putNextEntry(new ZipEntry("AndroidManifest.xml"));
+                try (var stubApk = new ZipFile(getPackageCodePath())) {
+                    APKInstall.transfer(stubApk.getInputStream(stubApk.getEntry("AndroidManifest.xml")), out);
+                }
+                out.putNextEntry(new ZipEntry("resources.arsc"));
+                decryptResources(out);
+            }
+            StubApk.addAssetPath(getResources(), res.getPath());
         }
     }
 }

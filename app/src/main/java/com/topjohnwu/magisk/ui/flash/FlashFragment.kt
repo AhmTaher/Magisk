@@ -5,7 +5,12 @@ import android.content.Context
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
-import android.view.*
+import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.navigation.NavDeepLinkBuilder
 import com.topjohnwu.magisk.MainDirections
@@ -17,7 +22,7 @@ import com.topjohnwu.magisk.core.cmp
 import com.topjohnwu.magisk.databinding.FragmentFlashMd2Binding
 import com.topjohnwu.magisk.ui.MainActivity
 
-class FlashFragment : BaseFragment<FragmentFlashMd2Binding>() {
+class FlashFragment : BaseFragment<FragmentFlashMd2Binding>(), MenuProvider {
 
     override val layoutRes = R.layout.fragment_flash_md2
     override val viewModel by viewModel<FlashViewModel>()
@@ -34,7 +39,6 @@ class FlashFragment : BaseFragment<FragmentFlashMd2Binding>() {
 
     override fun onStart() {
         super.onStart()
-        setHasOptionsMenu(true)
         activity?.setTitle(R.string.flash_screen_title)
 
         viewModel.state.observe(this) {
@@ -54,11 +58,11 @@ class FlashFragment : BaseFragment<FragmentFlashMd2Binding>() {
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+    override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.menu_flash, menu)
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+    override fun onMenuItemSelected(item: MenuItem): Boolean {
         return viewModel.onMenuItemClicked(item)
     }
 

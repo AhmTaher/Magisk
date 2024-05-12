@@ -22,17 +22,17 @@ import com.topjohnwu.magisk.arch.BaseViewModel
 import com.topjohnwu.magisk.core.Config
 import com.topjohnwu.magisk.core.data.magiskdb.PolicyDao
 import com.topjohnwu.magisk.core.di.AppContext
+import com.topjohnwu.magisk.core.ktx.getLabel
+import com.topjohnwu.magisk.core.ktx.toast
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.ALLOW
 import com.topjohnwu.magisk.core.model.su.SuPolicy.Companion.DENY
 import com.topjohnwu.magisk.core.su.SuRequestHandler
-import com.topjohnwu.magisk.core.utils.BiometricHelper
 import com.topjohnwu.magisk.databinding.set
+import com.topjohnwu.magisk.events.AuthEvent
 import com.topjohnwu.magisk.events.DieEvent
 import com.topjohnwu.magisk.events.ShowUIEvent
-import com.topjohnwu.magisk.events.dialog.BiometricEvent
-import com.topjohnwu.magisk.ktx.getLabel
 import com.topjohnwu.magisk.utils.TextHolder
-import com.topjohnwu.magisk.utils.Utils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit.SECONDS
 
@@ -62,7 +62,7 @@ class SuRequestViewModel(
         if (event.flags and MotionEvent.FLAG_WINDOW_IS_OBSCURED != 0
             || event.flags and MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED != 0) {
             if (event.action == MotionEvent.ACTION_UP) {
-                Utils.toast(R.string.touch_filtered_warning, Toast.LENGTH_SHORT)
+                AppContext.toast(R.string.touch_filtered_warning, Toast.LENGTH_SHORT)
             }
             return@OnTouchListener Config.suTapjack
         }
@@ -70,17 +70,14 @@ class SuRequestViewModel(
     }
 
     private val handler = SuRequestHandler(AppContext.packageManager, policyDB)
-    private lateinit var timer: CountDownTimer
+    private val millis = SECONDS.toMillis(Config.suDefaultTimeout.toLong())
+    private var timer = SuTimer(millis, 1000)
     private var initialized = false
 
     fun grantPressed() {
         cancelTimer()
-        if (BiometricHelper.isEnabled) {
-            BiometricEvent {
-                onSuccess {
-                    respond(ALLOW)
-                }
-            }.publish()
+        if (Config.userAuth) {
+            AuthEvent { respond(ALLOW) }.publish()
         } else {
             respond(ALLOW)
         }
@@ -96,7 +93,7 @@ class SuRequestViewModel(
     }
 
     fun handleRequest(intent: Intent) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             if (handler.start(intent))
                 showDialog()
             else
@@ -125,8 +122,7 @@ class SuRequestViewModel(
         selectedItemPosition = timeoutPrefs.getInt(packageName, 0)
 
         // Set timer
-        val millis = SECONDS.toMillis(Config.suDefaultTimeout.toLong())
-        timer = SuTimer(millis, 1000).apply { start() }
+        timer.start()
 
         // Actually show the UI
         ShowUIEvent(if (Config.suTapjack) EmptyAccessibilityDelegate else null).publish()
@@ -189,15 +185,15 @@ class SuRequestViewModel(
 
     // Invisible for accessibility services
     object EmptyAccessibilityDelegate : View.AccessibilityDelegate() {
-        override fun sendAccessibilityEvent(host: View?, eventType: Int) {}
-        override fun performAccessibilityAction(host: View?, action: Int, args: Bundle?) = true
-        override fun sendAccessibilityEventUnchecked(host: View?, event: AccessibilityEvent?) {}
-        override fun dispatchPopulateAccessibilityEvent(host: View?, event: AccessibilityEvent?) = true
-        override fun onPopulateAccessibilityEvent(host: View?, event: AccessibilityEvent?) {}
-        override fun onInitializeAccessibilityEvent(host: View?, event: AccessibilityEvent?) {}
+        override fun sendAccessibilityEvent(host: View, eventType: Int) {}
+        override fun performAccessibilityAction(host: View, action: Int, args: Bundle?) = true
+        override fun sendAccessibilityEventUnchecked(host: View, event: AccessibilityEvent) {}
+        override fun dispatchPopulateAccessibilityEvent(host: View, event: AccessibilityEvent) = true
+        override fun onPopulateAccessibilityEvent(host: View, event: AccessibilityEvent) {}
+        override fun onInitializeAccessibilityEvent(host: View, event: AccessibilityEvent) {}
         override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {}
         override fun addExtraDataToAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo, extraDataKey: String, arguments: Bundle?) {}
-        override fun onRequestSendAccessibilityEvent(host: ViewGroup?, child: View?, event: AccessibilityEvent?): Boolean = false
-        override fun getAccessibilityNodeProvider(host: View?): AccessibilityNodeProvider? = null
+        override fun onRequestSendAccessibilityEvent(host: ViewGroup, child: View, event: AccessibilityEvent): Boolean = false
+        override fun getAccessibilityNodeProvider(host: View): AccessibilityNodeProvider? = null
     }
 }
